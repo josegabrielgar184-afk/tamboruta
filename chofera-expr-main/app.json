@@ -24,7 +24,6 @@
     "android": {
       "package": "com.chofera.tambogrande",
       "versionCode": 1,
-      "proguardRules": "-keep class androidx.work.** { *; }\n-keep class * extends androidx.room.RoomDatabase { *; }\n-dontwarn androidx.work.impl.background.systemjob.**",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.png",
         "backgroundColor": "#059669"
@@ -57,6 +56,15 @@
       "expo-web-browser",
       "expo-splash-screen",
       "expo-status-bar",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "enableProguardInReleaseBuilds": false,
+            "enableShrinkResources": false
+          }
+        }
+      ],
       [
         "expo-camera",
         {
