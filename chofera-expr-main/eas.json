@@ -8,12 +8,12 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_FIREBASE_API_KEY": "tu_api_key_real",
-        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "tu_proyecto.firebaseapp.com",
-        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "tu_project_id",
-        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "tu_proyecto.appspot.com",
-        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "tu_sender_id",
-        "EXPO_PUBLIC_FIREBASE_APP_ID": "tu_app_id"
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyAwnzysIaVPTJ4ccJE8FMKFnqyssmz0kQ8",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "e-rincondedos.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "e-rincondedos",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "e-rincondedos.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "233474352081",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:233474352081:web:d1a9d70b9d8c05a291b6f0"
       }
     },
     "production": {
