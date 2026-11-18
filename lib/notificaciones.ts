@@ -12,22 +12,30 @@ Notifications.setNotificationHandler({
 });
 
 export async function requestNotificationPermissions() {
-  const { status: existingStatus } = await Notifications.getPermissionsAsync();
-  let finalStatus = existingStatus;
-  if (existingStatus !== 'granted') {
-    const { status } = await Notifications.requestPermissionsAsync();
-    finalStatus = status;
+  if (Platform.OS === 'web') return false;
+  try {
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+    return finalStatus === 'granted';
+  } catch {
+    return false;
   }
-  return finalStatus === 'granted';
 }
 
 export async function scheduleNotification(title: string, body: string) {
-  await Notifications.scheduleNotificationAsync({
-    content: {
-      title,
-      body,
-      sound: 'default',
-    },
-    trigger: null, // Inmediato
-  });
+  if (Platform.OS === 'web') return;
+  try {
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title,
+        body,
+        sound: 'default',
+      },
+      trigger: null,
+    });
+  } catch {}
 }

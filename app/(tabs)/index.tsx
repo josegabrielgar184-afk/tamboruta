@@ -257,6 +257,7 @@ export default function RutasScreen() {
   const [mostrarMapaRadar, setMostrarMapaRadar] = useState(true);
 
   const [ofertasFlashHome, setOfertasFlashHome] = useState<any[]>([]);
+  const [indiceFlash, setIndiceFlash] = useState(0);
 
   const [viajeActivo, setViajeActivo] = useState<{
     id: string;
@@ -328,12 +329,21 @@ export default function RutasScreen() {
           }
         });
         setOfertasFlashHome(vigentes);
+        setIndiceFlash(0);
       } catch {}
     };
     cargarFlash();
     const intervalFlash = setInterval(cargarFlash, 45000);
     return () => clearInterval(intervalFlash);
   }, []);
+
+  useEffect(() => {
+    if (ofertasFlashHome.length <= 1) return;
+    const intervalRotacion = setInterval(() => {
+      setIndiceFlash((prev) => (prev + 1) % ofertasFlashHome.length);
+    }, 5000);
+    return () => clearInterval(intervalRotacion);
+  }, [ofertasFlashHome.length]);
 
   const rolActual = (perfil?.rol || storeUser?.rol) as string | undefined;
   const esChofer = rolActual === 'chofer';
@@ -1084,7 +1094,7 @@ export default function RutasScreen() {
         >
           <Zap color="#111827" size={16} fill="#111827" />
           <Text style={{ fontSize: 12, fontWeight: '800', color: '#111827', flex: 1 }} numberOfLines={1}>
-            ⚡ {ofertasFlashHome.length} Oferta(s) Flash hoy: {ofertasFlashHome[0].nombre} — Ver en Tienda
+            ⚡ {ofertasFlashHome.length} Oferta(s) Flash hoy: {ofertasFlashHome[indiceFlash]?.nombre || ofertasFlashHome[0]?.nombre} — Ver en Tienda
           </Text>
         </Pressable>
       )}
