@@ -658,11 +658,16 @@ export default function AdminDashboardScreen() {
           </View>
         </View>
 
-        <View style={{ flexDirection: 'row', backgroundColor: '#f3f4f6', borderRadius: 12, padding: 3, gap: 3 }}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={{ backgroundColor: '#f3f4f6', borderRadius: 12, padding: 3 }}
+          contentContainerStyle={{ gap: 3 }}
+        >
           <Pressable
             onPress={() => setTab('membresias')}
             style={{
-              flex: 1,
+              paddingHorizontal: 14,
               paddingVertical: 9,
               borderRadius: 9,
               alignItems: 'center',
@@ -683,7 +688,7 @@ export default function AdminDashboardScreen() {
           <Pressable
             onPress={() => setTab('flash')}
             style={{
-              flex: 1,
+              paddingHorizontal: 14,
               paddingVertical: 9,
               borderRadius: 9,
               alignItems: 'center',
@@ -704,7 +709,7 @@ export default function AdminDashboardScreen() {
           <Pressable
             onPress={() => setTab('equipo')}
             style={{
-              flex: 1,
+              paddingHorizontal: 14,
               paddingVertical: 9,
               borderRadius: 9,
               alignItems: 'center',
@@ -725,7 +730,7 @@ export default function AdminDashboardScreen() {
           <Pressable
             onPress={() => setTab('soporte')}
             style={{
-              flex: 1,
+              paddingHorizontal: 14,
               paddingVertical: 9,
               borderRadius: 9,
               alignItems: 'center',
@@ -747,7 +752,7 @@ export default function AdminDashboardScreen() {
             <Pressable
               onPress={() => setTab('config')}
               style={{
-                flex: 1,
+                paddingHorizontal: 14,
                 paddingVertical: 9,
                 borderRadius: 9,
                 alignItems: 'center',
@@ -765,7 +770,7 @@ export default function AdminDashboardScreen() {
               </Text>
             </Pressable>
           )}
-        </View>
+        </ScrollView>
       </View>
 
       {loading ? (
