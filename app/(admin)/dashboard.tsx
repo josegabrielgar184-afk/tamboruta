@@ -660,9 +660,9 @@ export default function AdminDashboardScreen() {
 
         <ScrollView
           horizontal
-          showsHorizontalScrollIndicator={false}
-          style={{ backgroundColor: '#f3f4f6', borderRadius: 12, padding: 3 }}
-          contentContainerStyle={{ gap: 3 }}
+          showsHorizontalScrollIndicator
+          style={{ backgroundColor: '#f3f4f6', borderRadius: 12, paddingVertical: 3 }}
+          contentContainerStyle={{ paddingHorizontal: 6, gap: 3 }}
         >
           <Pressable
             onPress={() => setTab('membresias')}

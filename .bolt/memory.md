@@ -16,13 +16,15 @@
 ## Visual design & UX direction
 
 - Expo Router file-based structure: `app/(admin)/`, `app/(tabs)/`, `app/chat/`
-- Admin tab bar: horizontal `ScrollView` with `showsHorizontalScrollIndicator={false}`; tabs: Pagos, Flash, Cuentas, Soporte, Mi QR/Config
+- Admin tab bar: horizontal `ScrollView`; tabs: Pagos, Flash, Cuentas, Soporte, Mi QR/Config
+- Tab bar scrollbar visible (`showsHorizontalScrollIndicator={true}`) with lateral padding on content so right-edge tabs (Soporte, Config) are discoverable
 - Design and colors must be preserved when adjusting layout
 - Avoid `flex: 1` on tab items when more than ~3 tabs exist (causes compression/hidden tabs)
 
 ## Decisions, constraints & rationale
 
 - Admin tab bar converted from `View` + `flex: 1` to horizontal `ScrollView` so all 5 tabs remain visible and tappable
+- Scrollbar made visible + ~6px lateral padding added to signal that Soporte/Config tabs are reachable by scrolling right
 - `tienda.tsx`: 4 `onSnapshot` listeners + polling interval; all have proper cleanup (`return () => unsub()`, `clearInterval`) — confirmed clean
 - `app/chat/tienda/[id].tsx`: 1 Firestore listener with proper `return unsub` cleanup — confirmed clean
 - Typecheck enforced and expected to pass after changes
