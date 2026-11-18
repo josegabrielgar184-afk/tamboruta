@@ -22,6 +22,7 @@ import {
   setDoc,
   addDoc,
   serverTimestamp,
+  orderBy,
 } from 'firebase/firestore';
 import { deleteObject, getStorage, ref } from 'firebase/storage';
 import * as ImagePicker from 'expo-image-picker';
@@ -39,6 +40,9 @@ import {
   Search,
   Video as VideoIcon,
   ShieldCheck,
+  MessageSquare,
+  Trash2,
+  CheckCheck,
 } from 'lucide-react-native';
 import { db, auth } from '@/lib/firebase';
 import { subirImagenStorage } from '@/lib/storage';
@@ -47,7 +51,7 @@ import { scheduleNotification } from '@/lib/notificaciones';
 import type { Usuario } from '@/types';
 import { esRolAdmin } from '@/types';
 
-type AdminTab = 'membresias' | 'flash' | 'equipo' | 'config';
+type AdminTab = 'membresias' | 'flash' | 'equipo' | 'soporte' | 'config';
 
 const SUPERADMIN_EMAILS = ['garricraft@gmail.com', 'josegabriel@gmail.com'];
 
@@ -100,6 +104,9 @@ export default function AdminDashboardScreen() {
   const [opcion3, setOpcion3] = useState('');
   const [encuestasLista, setEncuestasLista] = useState<any[]>([]);
   const [creandoEncuesta, setCreandoEncuesta] = useState(false);
+  const [tipoEncuesta, setTipoEncuesta] = useState<'cerrada' | 'abierta'>('cerrada');
+
+  const [mensajesSoporte, setMensajesSoporte] = useState<any[]>([]);
 
   const rolStr = (user?.rol || '') as string;
   const esSuperAdmin = Boolean(
@@ -198,6 +205,15 @@ export default function AdminDashboardScreen() {
       setEncuestasLista(lista);
     });
 
+    const qSoporte = query(
+      collection(db, 'soporte_supervisor'),
+      orderBy('fecha', 'desc')
+    );
+    const unsubSoporte = onSnapshot(qSoporte, (snap) => {
+      const lista = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+      setMensajesSoporte(lista);
+    });
+
     return () => {
       unsubMem();
       unsubPagos();
@@ -206,6 +222,7 @@ export default function AdminDashboardScreen() {
       unsubConfig();
       unsubVideo();
       unsubEnc();
+      unsubSoporte();
     };
   }, [tieneAcceso]);
 
@@ -473,35 +490,48 @@ export default function AdminDashboardScreen() {
 
   const lanzarEncuesta = async () => {
     if (!esSuperAdmin) return;
-    if (!preguntaEncuesta.trim() || !opcion1.trim() || !opcion2.trim()) {
-      Alert.alert('Faltan datos', 'Escribe la pregunta y al menos 2 opciones de respuesta.');
+    if (!preguntaEncuesta.trim()) {
+      Alert.alert('Faltan datos', 'Escribe la pregunta de la encuesta.');
+      return;
+    }
+    if (tipoEncuesta === 'cerrada' && (!opcion1.trim() || !opcion2.trim())) {
+      Alert.alert('Faltan datos', 'Escribe al menos 2 opciones de respuesta para la encuesta cerrada.');
       return;
     }
     setCreandoEncuesta(true);
     try {
+      const semanaActual = obtenerSemanaActual();
       for (const enc of encuestasLista) {
-        if (enc.activa) {
+        if (enc.activa && enc.semana === semanaActual) {
           await updateDoc(doc(db, 'encuestas', enc.id), { activa: false }).catch(() => {});
         }
       }
 
-      const opciones = [opcion1.trim(), opcion2.trim()];
-      if (opcion3.trim()) opciones.push(opcion3.trim());
-
-      await addDoc(collection(db, 'encuestas'), {
+      const datosEncuesta: any = {
         pregunta: preguntaEncuesta.trim(),
-        opciones,
-        votos: {},
+        tipo: tipoEncuesta,
+        semana: semanaActual,
         activa: true,
         creadoPor: user?.nombre || 'Super Admin',
         createdAt: serverTimestamp(),
-      });
+      };
+
+      if (tipoEncuesta === 'cerrada') {
+        const opciones = [opcion1.trim(), opcion2.trim()];
+        if (opcion3.trim()) opciones.push(opcion3.trim());
+        datosEncuesta.opciones = opciones;
+        datosEncuesta.votos = {};
+      } else {
+        datosEncuesta.respuestas = {};
+      }
+
+      await addDoc(collection(db, 'encuestas'), datosEncuesta);
 
       setPreguntaEncuesta('');
       setOpcion1('');
       setOpcion2('');
       setOpcion3('');
-      Alert.alert('Encuesta publicada', 'Los usuarios la verán al abrir Rutas Express.');
+      Alert.alert('Encuesta semanal publicada', `Semana ${semanaActual}. Los usuarios la verán al abrir TamboRuta.`);
     } catch (e: any) {
       Alert.alert('Error', e?.message || 'No se pudo crear la encuesta.');
     } finally {
@@ -511,6 +541,37 @@ export default function AdminDashboardScreen() {
 
   const cerrarEncuesta = async (encId: string) => {
     await updateDoc(doc(db, 'encuestas', encId), { activa: false }).catch(() => {});
+  };
+
+  const obtenerSemanaActual = () => {
+    const ahora = new Date();
+    const enero4 = new Date(ahora.getFullYear(), 0, 4);
+    const diaSemana = (ahora.getDay() + 6) % 7;
+    const diffDias = Math.floor((ahora.getTime() - enero4.getTime()) / 86400000);
+    const numSemana = Math.ceil((diffDias + enero4.getDay() + 1) / 7);
+    return `${ahora.getFullYear()}-W${String(numSemana).padStart(2, '0')}`;
+  };
+
+  const marcarSoporteResuelto = async (solId: string) => {
+    await updateDoc(doc(db, 'soporte_supervisor', solId), {
+      atendido: true,
+      resueltoEn: serverTimestamp(),
+    }).catch(() => {});
+  };
+
+  const eliminarMensajeSoporte = async (solId: string) => {
+    Alert.alert('Eliminar consulta', '¿Seguro que deseas eliminar este mensaje?', [
+      { text: 'No', style: 'cancel' },
+      {
+        text: 'Sí, eliminar',
+        style: 'destructive',
+        onPress: () => {
+          updateDoc(doc(db, 'soporte_supervisor', solId), {
+            eliminado: true,
+          }).catch(() => {});
+        },
+      },
+    ]);
   };
 
   if (!tieneAcceso) {
@@ -661,6 +722,27 @@ export default function AdminDashboardScreen() {
             </Text>
           </Pressable>
 
+          <Pressable
+            onPress={() => setTab('soporte')}
+            style={{
+              flex: 1,
+              paddingVertical: 9,
+              borderRadius: 9,
+              alignItems: 'center',
+              backgroundColor: tab === 'soporte' ? '#0284c7' : 'transparent',
+            }}
+          >
+            <Text
+              style={{
+                fontWeight: '800',
+                fontSize: 11,
+                color: tab === 'soporte' ? '#fff' : '#4b5563',
+              }}
+            >
+              Soporte ({mensajesSoporte.filter((m) => !m.atendido && !m.eliminado).length})
+            </Text>
+          </Pressable>
+
           {esSuperAdmin && (
             <Pressable
               onPress={() => setTab('config')}
@@ -669,7 +751,7 @@ export default function AdminDashboardScreen() {
                 paddingVertical: 9,
                 borderRadius: 9,
                 alignItems: 'center',
-                backgroundColor: tab === 'config' ? '#0284c7' : 'transparent',
+                backgroundColor: tab === 'config' ? '#7c3aed' : 'transparent',
               }}
             >
               <Text
@@ -1105,6 +1187,95 @@ export default function AdminDashboardScreen() {
             );
           })}
         </ScrollView>
+      ) : tab === 'soporte' ? (
+        <ScrollView contentContainerStyle={{ padding: 18, paddingBottom: 60 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+            <MessageSquare color="#0284c7" size={18} />
+            <Text style={{ fontSize: 15, fontWeight: '800', color: '#111827' }}>
+              Consultas de la Guía ({mensajesSoporte.filter((m) => !m.eliminado).length})
+            </Text>
+          </View>
+          <Text style={{ color: '#6b7280', fontSize: 12, marginBottom: 12 }}>
+            Mensajes enviados por usuarios desde la sección Guía de la app.
+          </Text>
+
+          {mensajesSoporte.filter((m) => !m.eliminado).length === 0 ? (
+            <View style={{ alignItems: 'center', paddingVertical: 30, backgroundColor: '#fff', borderRadius: 16 }}>
+              <MessageSquare color="#d1d5db" size={36} />
+              <Text style={{ color: '#9ca3af', marginTop: 8, fontSize: 13 }}>
+                No hay consultas pendientes.
+              </Text>
+            </View>
+          ) : (
+            mensajesSoporte.filter((m) => !m.eliminado).map((msg) => {
+              const fecha = msg.fecha?.seconds
+                ? new Date(msg.fecha.seconds * 1000).toLocaleString('es-PE', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+                : 'Reciente';
+              return (
+                <View
+                  key={msg.id}
+                  style={{
+                    backgroundColor: '#fff',
+                    borderRadius: 14,
+                    padding: 14,
+                    marginBottom: 10,
+                    borderWidth: 1,
+                    borderColor: msg.atendido ? '#d1fae5' : '#e5e7eb',
+                  }}
+                >
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                    <Text style={{ fontWeight: '800', fontSize: 14, color: '#111827' }}>
+                      {msg.nombre || 'Usuario'}
+                    </Text>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: msg.atendido ? '#059669' : '#d97706' }}>
+                      {msg.atendido ? 'RESUELTO' : 'PENDIENTE'}
+                    </Text>
+                  </View>
+                  <Text style={{ fontSize: 11, color: '#9ca3af', marginBottom: 6 }}>{fecha}</Text>
+                  <Text style={{ fontSize: 14, color: '#374151', lineHeight: 20, marginBottom: 10 }}>
+                    {msg.mensaje}
+                  </Text>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    {!msg.atendido && (
+                      <Pressable
+                        onPress={() => marcarSoporteResuelto(msg.id)}
+                        style={{
+                          flex: 1,
+                          backgroundColor: '#059669',
+                          paddingVertical: 10,
+                          borderRadius: 10,
+                          alignItems: 'center',
+                          flexDirection: 'row',
+                          justifyContent: 'center',
+                          gap: 5,
+                        }}
+                      >
+                        <CheckCheck color="#fff" size={15} />
+                        <Text style={{ color: '#fff', fontWeight: '800', fontSize: 12 }}>Marcar resuelto</Text>
+                      </Pressable>
+                    )}
+                    <Pressable
+                      onPress={() => eliminarMensajeSoporte(msg.id)}
+                      style={{
+                        flex: 1,
+                        backgroundColor: '#fee2e2',
+                        paddingVertical: 10,
+                        borderRadius: 10,
+                        alignItems: 'center',
+                        flexDirection: 'row',
+                        justifyContent: 'center',
+                        gap: 5,
+                      }}
+                    >
+                      <Trash2 color="#dc2626" size={15} />
+                      <Text style={{ color: '#dc2626', fontWeight: '700', fontSize: 12 }}>Eliminar</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              );
+            })
+          )}
+        </ScrollView>
       ) : (
         <ScrollView contentContainerStyle={{ padding: 18, paddingBottom: 60 }}>
           {/* BLOQUE 1: MI QR YAPE OFICIAL */}
@@ -1261,7 +1432,7 @@ export default function AdminDashboardScreen() {
             </Pressable>
           </View>
 
-          {/* BLOQUE 3: ENCUESTA */}
+          {/* BLOQUE 3: ENCUESTA SEMANAL */}
           <View
             style={{
               backgroundColor: '#fff',
@@ -1274,8 +1445,40 @@ export default function AdminDashboardScreen() {
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
               <BarChart3 color="#0284c7" size={20} />
               <Text style={{ fontSize: 16, fontWeight: '800', color: '#111827' }}>
-                Crear Encuesta Rápida
+                Encuesta Semanal ({obtenerSemanaActual()})
               </Text>
+            </View>
+
+            <Text style={{ fontSize: 12, fontWeight: '700', color: '#374151', marginBottom: 6 }}>Tipo de encuesta:</Text>
+            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
+              <Pressable
+                onPress={() => setTipoEncuesta('cerrada')}
+                style={{
+                  flex: 1,
+                  paddingVertical: 10,
+                  borderRadius: 10,
+                  alignItems: 'center',
+                  backgroundColor: tipoEncuesta === 'cerrada' ? '#0284c7' : '#f3f4f6',
+                }}
+              >
+                <Text style={{ fontSize: 12, fontWeight: '800', color: tipoEncuesta === 'cerrada' ? '#fff' : '#374151' }}>
+                  Cerrada (opciones)
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setTipoEncuesta('abierta')}
+                style={{
+                  flex: 1,
+                  paddingVertical: 10,
+                  borderRadius: 10,
+                  alignItems: 'center',
+                  backgroundColor: tipoEncuesta === 'abierta' ? '#0284c7' : '#f3f4f6',
+                }}
+              >
+                <Text style={{ fontSize: 12, fontWeight: '800', color: tipoEncuesta === 'abierta' ? '#fff' : '#374151' }}>
+                  Abierta (texto libre)
+                </Text>
+              </Pressable>
             </View>
 
             <TextInput
@@ -1284,24 +1487,37 @@ export default function AdminDashboardScreen() {
               placeholder="Pregunta (Ej: ¿Qué ruta nueva debemos agregar?)"
               style={inputStyle}
             />
-            <TextInput
-              value={opcion1}
-              onChangeText={setOpcion1}
-              placeholder="Opción 1"
-              style={inputStyle}
-            />
-            <TextInput
-              value={opcion2}
-              onChangeText={setOpcion2}
-              placeholder="Opción 2"
-              style={inputStyle}
-            />
-            <TextInput
-              value={opcion3}
-              onChangeText={setOpcion3}
-              placeholder="Opción 3 (opcional)"
-              style={inputStyle}
-            />
+
+            {tipoEncuesta === 'cerrada' && (
+              <>
+                <TextInput
+                  value={opcion1}
+                  onChangeText={setOpcion1}
+                  placeholder="Opción 1"
+                  style={inputStyle}
+                />
+                <TextInput
+                  value={opcion2}
+                  onChangeText={setOpcion2}
+                  placeholder="Opción 2"
+                  style={inputStyle}
+                />
+                <TextInput
+                  value={opcion3}
+                  onChangeText={setOpcion3}
+                  placeholder="Opción 3 (opcional)"
+                  style={inputStyle}
+                />
+              </>
+            )}
+
+            {tipoEncuesta === 'abierta' && (
+              <View style={{ backgroundColor: '#f0f9ff', borderRadius: 10, padding: 10, marginBottom: 8, borderWidth: 1, borderColor: '#bae6fd' }}>
+                <Text style={{ fontSize: 12, color: '#0369a1', fontWeight: '600' }}>
+                  El usuario responderá escribiendo libremente su opinión en un campo de texto.
+                </Text>
+              </View>
+            )}
 
             <Pressable
               onPress={lanzarEncuesta}
@@ -1315,13 +1531,14 @@ export default function AdminDashboardScreen() {
               }}
             >
               <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>
-                {creandoEncuesta ? 'Publicando...' : 'Publicar Encuesta en Vivo'}
+                {creandoEncuesta ? 'Publicando...' : 'Publicar Encuesta Semanal'}
               </Text>
             </Pressable>
 
             {encuestasLista.map((enc) => {
-              const votosObj = enc.votos || {};
-              const totalVotos = Object.keys(votosObj).length;
+              const totalParticipaciones = enc.tipo === 'abierta'
+                ? Object.keys(enc.respuestas || {}).length
+                : Object.keys(enc.votos || {}).length;
               return (
                 <View
                   key={enc.id}
@@ -1343,12 +1560,22 @@ export default function AdminDashboardScreen() {
                         color: enc.activa ? '#059669' : '#9ca3af',
                       }}
                     >
-                      {enc.activa ? 'ACTIVA' : 'CERRADA'}
+                      {enc.activa ? 'ACTIVA' : 'CERRADA'} · {enc.tipo || 'cerrada'}
                     </Text>
                   </View>
                   <Text style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>
-                    Total votos: {totalVotos}
+                    Semana: {enc.semana || '-'} · Participaciones: {totalParticipaciones}
                   </Text>
+                  {enc.tipo === 'abierta' && enc.respuestas && Object.keys(enc.respuestas).length > 0 && (
+                    <View style={{ marginTop: 6, gap: 4 }}>
+                      {Object.entries(enc.respuestas).map(([uidResp, texto]) => (
+                        <View key={uidResp} style={{ backgroundColor: '#f9fafb', borderRadius: 8, padding: 8, borderWidth: 1, borderColor: '#e5e7eb' }}>
+                          <Text style={{ fontSize: 11, fontWeight: '700', color: '#6b7280' }}>{uidResp.slice(0, 6)}</Text>
+                          <Text style={{ fontSize: 13, color: '#111827', marginTop: 2 }}>{texto as string}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
                   {enc.activa && (
                     <Pressable
                       onPress={() => cerrarEncuesta(enc.id)}

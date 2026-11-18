@@ -25,6 +25,7 @@ import {
   query,
   where,
   onSnapshot,
+  getDocs,
   addDoc,
   serverTimestamp,
   updateDoc,
@@ -246,6 +247,7 @@ export default function RutasScreen() {
   const [encuesta, setEncuesta] = useState<any>(null);
   const [modalEncuesta, setModalEncuesta] = useState(false);
   const [opcionEncuestaSel, setOpcionEncuestaSel] = useState<string | null>(null);
+  const [respuestaEncuestaAbierta, setRespuestaEncuestaAbierta] = useState('');
 
   const [solicitudesRaw, setSolicitudesRaw] = useState<Solicitud[]>([]);
   const [ahoraTick, setAhoraTick] = useState(() => Date.now());
@@ -313,19 +315,24 @@ export default function RutasScreen() {
   }, []);
 
   useEffect(() => {
-    const qFlash = query(collection(db, 'productos'), where('flash', '==', true));
-    const unsub = onSnapshot(qFlash, (snap) => {
-      const ahora = Date.now();
-      const vigentes: any[] = [];
-      snap.forEach((d) => {
-        const data = d.data() as any;
-        if (data.activo !== false && (!data.flashExpiraEn || data.flashExpiraEn > ahora)) {
-          vigentes.push({ id: d.id, ...data });
-        }
-      });
-      setOfertasFlashHome(vigentes);
-    });
-    return () => unsub();
+    const cargarFlash = async () => {
+      try {
+        const qFlash = query(collection(db, 'productos'), where('flash', '==', true));
+        const snap = await getDocs(qFlash);
+        const ahora = Date.now();
+        const vigentes: any[] = [];
+        snap.forEach((d) => {
+          const data = d.data() as any;
+          if (data.activo !== false && (!data.flashExpiraEn || data.flashExpiraEn > ahora)) {
+            vigentes.push({ id: d.id, ...data });
+          }
+        });
+        setOfertasFlashHome(vigentes);
+      } catch {}
+    };
+    cargarFlash();
+    const intervalFlash = setInterval(cargarFlash, 45000);
+    return () => clearInterval(intervalFlash);
   }, []);
 
   const rolActual = (perfil?.rol || storeUser?.rol) as string | undefined;
@@ -353,28 +360,33 @@ export default function RutasScreen() {
   };
 
   useEffect(() => {
-    const q = query(
-      collection(db, 'usuarios'),
-      where('rol', '==', 'chofer'),
-      where('enLinea', '==', true)
-    );
-    const unsub = onSnapshot(q, (snap) => {
-      const activas: MotoCercana[] = [];
-      snap.forEach((d) => {
-        const data = d.data() as any;
-        const vigente = data.fechaVencimiento && data.fechaVencimiento > Date.now();
-        if (vigente && typeof data.lat === 'number' && typeof data.lng === 'number') {
-          activas.push({
-            id: d.id,
-            nombre: data.nombre || 'Chofer',
-            latitude: data.lat,
-            longitude: data.lng,
-          });
-        }
-      });
-      setMotosEnLinea(activas);
-    });
-    return () => unsub();
+    const cargarMotos = async () => {
+      try {
+        const q = query(
+          collection(db, 'usuarios'),
+          where('rol', '==', 'chofer'),
+          where('enLinea', '==', true)
+        );
+        const snap = await getDocs(q);
+        const activas: MotoCercana[] = [];
+        snap.forEach((d) => {
+          const data = d.data() as any;
+          const vigente = data.fechaVencimiento && data.fechaVencimiento > Date.now();
+          if (vigente && typeof data.lat === 'number' && typeof data.lng === 'number') {
+            activas.push({
+              id: d.id,
+              nombre: data.nombre || 'Chofer',
+              latitude: data.lat,
+              longitude: data.lng,
+            });
+          }
+        });
+        setMotosEnLinea(activas);
+      } catch {}
+    };
+    cargarMotos();
+    const intervalMotos = setInterval(cargarMotos, 45000);
+    return () => clearInterval(intervalMotos);
   }, []);
 
   // Carga Bienvenida, Video Novedad y Encuesta Activa
@@ -401,13 +413,17 @@ export default function RutasScreen() {
     const unsubEnc = onSnapshot(qEnc, (snapshot) => {
       if (!snapshot.empty) {
         const enc = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as any;
-        const yaVotoEnNube = uid && enc.votos && enc.votos[uid];
-        if (yaVotoEnNube) return;
+        const yaParticipo = uid && (
+          (enc.tipo === 'abierta' && enc.respuestas && enc.respuestas[uid]) ||
+          (enc.tipo !== 'abierta' && enc.votos && enc.votos[uid])
+        );
+        if (yaParticipo) return;
 
         AsyncStorage.getItem(`encuesta_no_mostrar_${enc.id}`).then((oculto) => {
           if (!oculto) {
             setEncuesta(enc);
             setOpcionEncuestaSel(null);
+            setRespuestaEncuestaAbierta('');
             setModalEncuesta(true);
           }
         });
@@ -421,22 +437,43 @@ export default function RutasScreen() {
   }, [uid]);
 
   const enviarVotoEncuesta = async () => {
-    if (!encuesta || !opcionEncuestaSel) {
-      Alert.alert('Elige una opción', 'Selecciona una alternativa antes de enviar.');
-      return;
-    }
-    try {
-      if (uid) {
-        await updateDoc(doc(db, 'encuestas', encuesta.id), {
-          [`votos.${uid}`]: opcionEncuestaSel,
-        });
+    if (!encuesta) return;
+    if (encuesta.tipo === 'abierta') {
+      if (!respuestaEncuestaAbierta.trim()) {
+        Alert.alert('Escribe tu respuesta', 'Comparte tu opinión antes de enviar.');
+        return;
       }
-      await AsyncStorage.setItem(`encuesta_no_mostrar_${encuesta.id}`, 'true');
-      setModalEncuesta(false);
-      reproducir('exito');
-      Alert.alert('¡Gracias por opinar!', 'Tu voto ayuda a mejorar TamboRuta.');
-    } catch {
-      setModalEncuesta(false);
+      try {
+        if (uid) {
+          await updateDoc(doc(db, 'encuestas', encuesta.id), {
+            [`respuestas.${uid}`]: respuestaEncuestaAbierta.trim(),
+          });
+        }
+        await AsyncStorage.setItem(`encuesta_no_mostrar_${encuesta.id}`, 'true');
+        setModalEncuesta(false);
+        reproducir('exito');
+        Alert.alert('¡Gracias por opinar!', 'Tu respuesta ayuda a mejorar TamboRuta.');
+      } catch {
+        setModalEncuesta(false);
+      }
+    } else {
+      if (!opcionEncuestaSel) {
+        Alert.alert('Elige una opción', 'Selecciona una alternativa antes de enviar.');
+        return;
+      }
+      try {
+        if (uid) {
+          await updateDoc(doc(db, 'encuestas', encuesta.id), {
+            [`votos.${uid}`]: opcionEncuestaSel,
+          });
+        }
+        await AsyncStorage.setItem(`encuesta_no_mostrar_${encuesta.id}`, 'true');
+        setModalEncuesta(false);
+        reproducir('exito');
+        Alert.alert('¡Gracias por opinar!', 'Tu voto ayuda a mejorar TamboRuta.');
+      } catch {
+        setModalEncuesta(false);
+      }
     }
   };
 
@@ -2344,35 +2381,57 @@ export default function RutasScreen() {
               {encuesta?.pregunta || '¿Qué te gustaría mejorar en TamboRuta?'}
             </Text>
 
-            {(encuesta?.opciones || ['Más rutas a caseríos', 'Más tiendas y ofertas']).map(
-              (op: string, idx: number) => {
-                const elegida = opcionEncuestaSel === op;
-                return (
-                  <Pressable
-                    key={idx}
-                    onPress={() => setOpcionEncuestaSel(op)}
-                    style={{
-                      padding: 13,
-                      borderRadius: 12,
-                      borderWidth: 1.5,
-                      borderColor: elegida ? '#059669' : '#e5e7eb',
-                      backgroundColor: elegida ? '#ecfdf5' : '#f9fafb',
-                      marginBottom: 8,
-                    }}
-                  >
-                    <Text
+            {encuesta?.tipo === 'abierta' ? (
+              <TextInput
+                value={respuestaEncuestaAbierta}
+                onChangeText={setRespuestaEncuestaAbierta}
+                placeholder="Escribe tu respuesta libre aquí..."
+                multiline
+                style={{
+                  backgroundColor: '#f9fafb',
+                  borderRadius: 12,
+                  paddingHorizontal: 14,
+                  paddingVertical: 12,
+                  fontSize: 15,
+                  borderWidth: 1.5,
+                  borderColor: '#e5e7eb',
+                  color: '#111827',
+                  minHeight: 80,
+                  textAlignVertical: 'top',
+                  marginBottom: 10,
+                }}
+              />
+            ) : (
+              (encuesta?.opciones || ['Más rutas a caseríos', 'Más tiendas y ofertas']).map(
+                (op: string, idx: number) => {
+                  const elegida = opcionEncuestaSel === op;
+                  return (
+                    <Pressable
+                      key={idx}
+                      onPress={() => setOpcionEncuestaSel(op)}
                       style={{
-                        fontWeight: '700',
-                        fontSize: 14,
-                        color: elegida ? '#065f46' : '#111827',
+                        padding: 13,
+                        borderRadius: 12,
+                        borderWidth: 1.5,
+                        borderColor: elegida ? '#059669' : '#e5e7eb',
+                        backgroundColor: elegida ? '#ecfdf5' : '#f9fafb',
+                        marginBottom: 8,
                       }}
                     >
-                      {elegida ? '● ' : '○ '}
-                      {op}
-                    </Text>
-                  </Pressable>
-                );
-              }
+                      <Text
+                        style={{
+                          fontWeight: '700',
+                          fontSize: 14,
+                          color: elegida ? '#065f46' : '#111827',
+                        }}
+                      >
+                        {elegida ? '● ' : '○ '}
+                        {op}
+                      </Text>
+                    </Pressable>
+                  );
+                }
+              )
             )}
 
             <Pressable
