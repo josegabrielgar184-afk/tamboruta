@@ -5,8 +5,7 @@
   "private": true,
   "scripts": {
     "dev": "EXPO_NO_TELEMETRY=1 expo start",
-    "build:web": "EXPO_NO_TELEMETRY=1 expo export --platform web",
-    "build": "EXPO_NO_TELEMETRY=1 expo export --platform web",
+    "build": "expo export --platform web",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
     "postinstall": "node -e \"const fs=require('fs'),p='node_modules/@expo/cli/build/src/start/server/AsyncWsTunnel.js';try{let s=fs.readFileSync(p,'utf8');if(s.includes('await _wstunnel().stopAsync();\\n        this.serverUrl')){s=s.replace('async stopAsync() {\\n        await _wstunnel().stopAsync();\\n        this.serverUrl = null;\\n    }','async stopAsync() {\\n        try {\\n            await _wstunnel().stopAsync();\\n        } catch (e) {\\n        }\\n        this.serverUrl = null;\\n    }');fs.writeFileSync(p,s);console.log('Patched AsyncWsTunnel.stopAsync')}}catch(e){console.log('AsyncWsTunnel patch skipped:',e.message)}\""
